@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-expo-app@latest ivan-budget --template tabs)",
+      "Bash(npx expo:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \"const fs = require\\('./node_modules/expo-file-system/build/index.js'\\); console.log\\(Object.keys\\(fs\\)\\)\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(node -e \"require\\('date-fns/locale'\\)\")",
+      "Bash(node -e \"const {hr} = require\\('date-fns/locale'\\); console.log\\(typeof hr\\);\")"
+    ]
+  }
+}
