@@ -9,7 +9,15 @@
       "Bash(node -e \"require\\('date-fns/locale'\\)\")",
       "Bash(node -e \"const {hr} = require\\('date-fns/locale'\\); console.log\\(typeof hr\\);\")",
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('expo:', p.dependencies.expo, 'rn:', p.dependencies['react-native']\\)\")",
-      "Bash(gradlew.bat assembleRelease)"
+      "Bash(gradlew.bat assembleRelease)",
+      "Bash(./gradlew.bat --version)",
+      "Bash(./gradlew.bat :app:assembleDebug)",
+      "Bash(cmd.exe /c \"gradlew.bat :app:assembleDebug 2>&1\")",
+      "Bash(cmd.exe /c \"gradlew.bat tasks --all 2>&1\")",
+      "Bash(powershell.exe -Command \"& './gradlew.bat' tasks 2>&1 | Select-Object -Last 30\")",
+      "Bash(powershell.exe -Command \"& './gradlew.bat' :app:assembleDebug 2>&1 | Select-Object -Last 50\")",
+      "Bash(powershell.exe -Command \"node --version; npx expo --version\")",
+      "Bash(powershell.exe:*)"
     ]
   }
 }

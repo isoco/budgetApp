@@ -54,8 +54,26 @@ export const EntryListItem = React.memo(function EntryListItem({
     ? entry.notes
     : (entry.category_name_hr ?? entry.category_name ?? '');
 
-  const showPlanned =
-    entry.planned_amount > 0 && entry.planned_amount !== entry.actual_amount;
+  const isIncome = entry.category_type === 'income';
+
+  // For income: badge shows "Primljeno" or "Očekivano"; for expense: shows "Plaćeno" or "Dospijeće"
+  const badgeLabel = (() => {
+    if (!entry.due_date && !entry.paid_date) return null;
+    if (isIncome) {
+      if (entry.paid_date) return `Primljeno ${formatDateShortHR(entry.paid_date)}`;
+      if (entry.due_date) return `Očekivano ${formatDateShortHR(entry.due_date)}`;
+    } else {
+      if (dueStatus === 'paid') return `Plaćeno ${formatDateShortHR(entry.paid_date!)}`;
+      if (entry.due_date) return `Dospijeće ${formatDateShortHR(entry.due_date)}`;
+    }
+    return null;
+  })();
+
+  const badgeColor = isIncome
+    ? (entry.paid_date ? Colors.income : Colors.dueSoon)
+    : DUE_STATUS_COLORS[dueStatus];
+
+  const displayAmount = entry.planned_amount;
 
   return (
     <TouchableOpacity onPress={handlePress} style={[styles.container, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
@@ -72,12 +90,10 @@ export const EntryListItem = React.memo(function EntryListItem({
           {displayName}
         </Text>
         <View style={styles.meta}>
-          {entry.due_date && (
-            <View style={[styles.dueBadge, { backgroundColor: DUE_STATUS_COLORS[dueStatus] + '20' }]}>
-              <Text variant="labelSmall" style={{ color: DUE_STATUS_COLORS[dueStatus] }}>
-                {dueStatus === 'paid'
-                  ? `Plaćeno ${formatDateShortHR(entry.paid_date!)}`
-                  : `Dospijeće ${formatDateShortHR(entry.due_date)}`}
+          {badgeLabel && (
+            <View style={[styles.dueBadge, { backgroundColor: badgeColor + '20' }]}>
+              <Text variant="labelSmall" style={{ color: badgeColor }}>
+                {badgeLabel}
               </Text>
             </View>
           )}
@@ -91,19 +107,14 @@ export const EntryListItem = React.memo(function EntryListItem({
 
       <View style={styles.right}>
         <Text variant="titleSmall" style={[styles.amount, { color: amountColor }]}>
-          {formatAmount(entry.actual_amount, settings.currency)}
+          {formatAmount(displayAmount, settings.currency)}
         </Text>
-        {showPlanned && (
-          <Text variant="labelSmall" style={[styles.plannedAmount, { color: C.unpaid }]}>
-            plan: {formatAmount(entry.planned_amount, settings.currency)}
-          </Text>
-        )}
         <View style={styles.actions}>
-          {entry.due_date && (
+          {(entry.due_date || isIncome) && (
             <IconButton
               icon={isPaid ? 'check-circle' : 'circle-outline'}
               size={18}
-              iconColor={isPaid ? Colors.paid : Colors.unpaid}
+              iconColor={isPaid ? (isIncome ? Colors.income : Colors.paid) : Colors.unpaid}
               onPress={handleTogglePaid}
               style={styles.actionBtn}
               containerColor="transparent"

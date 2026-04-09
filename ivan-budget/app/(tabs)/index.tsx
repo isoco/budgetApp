@@ -12,7 +12,7 @@ import { BudgetCard } from '../../components/common/BudgetCard';
 import { AddEntrySheet } from '../../components/month/AddEntrySheet';
 import { formatAmount } from '../../utils/currency';
 import { getCurrentYearMonth, getMonthLabel, getDueStatus, formatDateShortHR } from '../../utils/dateHelpers';
-import { getUpcomingBills } from '../../database/queries/entries';
+import { getUpcomingBills, getUpcomingIncome } from '../../database/queries/entries';
 import { getMonthDailySummary, getDayTracking, upsertDayTracking, getMonthProjectedDailySpending } from '../../database/queries/daily';
 import { getMonthBalance } from '../../database/queries/summary';
 import { getMonthFuelTotal } from '../../database/queries/fuel';
@@ -42,6 +42,7 @@ export default function DashboardScreen() {
   const summary = useSummary(entries);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [upcomingBills, setUpcomingBills] = useState<BudgetEntry[]>([]);
+  const [upcomingIncome, setUpcomingIncome] = useState<BudgetEntry[]>([]);
   const [dailySummary, setDailySummary] = useState({ total_allowed: 0, total_spent: 0, surplus: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [projectedDailySpending, setProjectedDailySpending] = useState(0);
@@ -77,14 +78,16 @@ export default function DashboardScreen() {
     await loadMonth(year, month, settings.daily_default_amount);
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear = month === 1 ? year - 1 : year;
-    const [bills, daily, projSpending, prevBalance, fuel] = await Promise.all([
+    const [bills, income, daily, projSpending, prevBalance, fuel] = await Promise.all([
       getUpcomingBills(7),
+      getUpcomingIncome(14),
       getMonthDailySummary(year, month),
       getMonthProjectedDailySpending(year, month, todayDay),
       getMonthBalance(prevYear, prevMonth),
       getMonthFuelTotal(year, month),
     ]);
     setUpcomingBills(bills);
+    setUpcomingIncome(income);
     setDailySummary(daily);
     setProjectedDailySpending(projSpending);
     setLastMonthBalance(prevBalance.balance);
@@ -126,8 +129,8 @@ export default function DashboardScreen() {
 
   const balanceValue = balance?.balance ?? 0;
   const totalBalance = balanceValue + lastMonthBalance;
-  // Procjena: income - fixed_expenses - fuel - daily_life_projection
-  const projectedBalance = summary.totalIncome - summary.effectiveExpenses - fuelTotal - projectedDailySpending;
+  // Procjena: all expected income (received + not yet received) - planned expenses - fuel - daily_life_projection
+  const projectedBalance = summary.expectedIncome - summary.plannedExpenses - fuelTotal - projectedDailySpending;
   const balanceColor = totalBalance >= 0 ? Colors.balance.positive : Colors.balance.negative;
   const balanceCardColors = getBalanceCardColors(totalBalance, theme.dark);
 
@@ -350,6 +353,42 @@ export default function DashboardScreen() {
                   </React.Fragment>
                 );
               })}
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* Upcoming income */}
+        {upcomingIncome.length > 0 && (
+          <Card style={[styles.card, { backgroundColor: C.surface }]} elevation={1}>
+            <Card.Title
+              title="Nadolazeći prihodi"
+              left={() => (
+                <MaterialCommunityIcons name="cash-clock" size={24} color={Colors.income} />
+              )}
+            />
+            <Card.Content style={styles.billsContent}>
+              {upcomingIncome.map((item, i) => (
+                <React.Fragment key={item.id}>
+                  {i > 0 && <Divider />}
+                  <View style={styles.billRow}>
+                    <MaterialCommunityIcons
+                      name={(item.category_icon ?? 'cash') as never}
+                      size={20}
+                      color={item.category_color ?? Colors.income}
+                      style={styles.billIcon}
+                    />
+                    <Text variant="bodyMedium" style={[styles.billName, { color: C.onSurface }]} numberOfLines={1}>
+                      {item.category_name_hr}
+                    </Text>
+                    <Text variant="labelSmall" style={[styles.billDate, { color: Colors.dueSoon }]}>
+                      {item.due_date ? formatDateShortHR(item.due_date) : ''}
+                    </Text>
+                    <Text variant="bodyMedium" style={{ color: Colors.income, fontWeight: 'bold' }}>
+                      {formatAmount(item.planned_amount, settings.currency)}
+                    </Text>
+                  </View>
+                </React.Fragment>
+              ))}
             </Card.Content>
           </Card>
         )}

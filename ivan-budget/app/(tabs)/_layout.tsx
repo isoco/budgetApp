@@ -1,6 +1,5 @@
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useSettingsStore } from '../../stores/useSettingsStore';
@@ -11,7 +10,6 @@ function TabIcon({ name, color }: { name: string; color: string }) {
 
 export default function TabLayout() {
   const { settings } = useSettingsStore();
-  const router = useRouter();
 
   return (
     <Tabs
@@ -29,11 +27,6 @@ export default function TabLayout() {
         headerTitleStyle: {
           fontWeight: 'bold',
         },
-        headerRight: () => (
-          <TouchableOpacity onPress={() => router.push('/settings')} style={{ marginRight: 16 }}>
-            <MaterialCommunityIcons name="cog" size={24} color="#ffffff" />
-          </TouchableOpacity>
-        ),
       }}
     >
       <Tabs.Screen
@@ -65,10 +58,17 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="two"
         options={{
           href: null,
+          title: 'Two',
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
           title: 'Postavke',
+          tabBarIcon: ({ color }) => <TabIcon name="cog" color={color} />,
         }}
       />
     </Tabs>

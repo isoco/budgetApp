@@ -124,6 +124,25 @@ export async function getUpcomingBills(daysAhead: number = 7): Promise<BudgetEnt
   );
 }
 
+export async function getUpcomingIncome(daysAhead: number = 7): Promise<BudgetEntry[]> {
+  const db = getDatabase();
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const futureDate = format(
+    new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000),
+    'yyyy-MM-dd'
+  );
+  return db.getAllAsync<BudgetEntry>(
+    `SELECT be.*, c.name_hr as category_name_hr, c.name as category_name,
+            c.icon as category_icon, c.color as category_color, c.type as category_type,
+            c.is_recurring as category_is_recurring
+     FROM budget_entries be
+     JOIN categories c ON be.category_id = c.id
+     WHERE c.type = 'income' AND be.due_date >= ? AND be.due_date <= ? AND be.paid_date IS NULL
+     ORDER BY be.due_date ASC`,
+    [today, futureDate]
+  );
+}
+
 export async function autoPopulateMonth(
   year: number,
   month: number,

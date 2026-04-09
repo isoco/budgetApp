@@ -12,13 +12,13 @@ import { useSettingsStore } from '../../stores/useSettingsStore';
 import { getActiveCategories } from '../../database/queries/categories';
 import { updateCategory } from '../../database/queries/categories';
 import { AmountInput } from '../common/AmountInput';
-import { isoNow } from '../../utils/dateHelpers';
+import { format } from 'date-fns';
 
 const schema = z.object({
   category_id: z.number().min(1, 'Odaberi kategoriju'),
-  planned_amount: z.string().min(1),
-  actual_amount: z.string().min(1),
+  amount: z.string().min(1),
   notes: z.string().optional(),
+  due_date: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -45,6 +45,7 @@ export function AddEntrySheet({
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedType, setSelectedType] = useState<CategoryType>('expense');
   const [isRecurring, setIsRecurring] = useState(false);
+  const [isReceived, setIsReceived] = useState(false);
   const [saving, setSaving] = useState(false);
   const { settings } = useSettingsStore();
   const C = useThemeColors();
@@ -53,9 +54,9 @@ export function AddEntrySheet({
     resolver: zodResolver(schema),
     defaultValues: {
       category_id: 0,
-      planned_amount: '0',
-      actual_amount: '0',
+      amount: '0',
       notes: '',
+      due_date: '',
     },
   });
 
@@ -70,18 +71,19 @@ export function AddEntrySheet({
   useEffect(() => {
     if (editEntry) {
       setValue('category_id', editEntry.category_id);
-      setValue('planned_amount', String(editEntry.planned_amount));
-      setValue('actual_amount', String(editEntry.actual_amount));
+      setValue('amount', String(editEntry.planned_amount));
       setValue('notes', editEntry.notes ?? '');
+      setValue('due_date', editEntry.due_date ?? '');
       setSelectedType((editEntry.category_type as CategoryType) ?? 'expense');
       setIsRecurring((editEntry.category_is_recurring ?? 0) === 1);
+      setIsReceived(!!editEntry.paid_date);
     } else {
       reset();
       setIsRecurring(false);
+      setIsReceived(false);
     }
   }, [editEntry, visible]);
 
-  // When a category is selected, auto-set isRecurring from that category
   useEffect(() => {
     if (selectedCatId > 0) {
       const cat = categories.find((c) => c.id === selectedCatId);
@@ -92,43 +94,57 @@ export function AddEntrySheet({
   }, [selectedCatId, categories]);
 
   const filteredCats = categories.filter((c) => c.type === selectedType);
-
   const selectedCat = categories.find((c) => c.id === selectedCatId);
   const isOstalo = selectedCat?.name === 'other_income' || selectedCat?.name === 'other_expense';
+  const isIncome = selectedType === 'income';
 
   const onSubmit = async (data: FormData) => {
     setSaving(true);
     try {
-      const selectedCat = categories.find((c) => c.id === data.category_id);
-      let dueDate: string | null = null;
-      if (selectedCat?.due_day) {
+      const cat = categories.find((c) => c.id === data.category_id);
+      const amount = parseFloat(data.amount) || 0;
+
+      // For expenses: use category due_day to build due_date if not manually set
+      let dueDate: string | null = data.due_date || null;
+      if (!dueDate && cat?.due_day && !isIncome) {
         const daysInMonth = new Date(year, month, 0).getDate();
-        const day = Math.min(selectedCat.due_day, daysInMonth);
+        const day = Math.min(cat.due_day, daysInMonth);
         dueDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       }
+
+      // For income: keep existing due_date when editing if not changed
+      if (isIncome && editEntry && !data.due_date) {
+        dueDate = editEntry.due_date ?? null;
+      }
+
+      const paidDate = isIncome
+        ? (isReceived ? (editEntry?.paid_date ?? format(new Date(), 'yyyy-MM-dd')) : null)
+        : (editEntry?.paid_date ?? null);
 
       await onSave({
         category_id: data.category_id,
         year,
         month,
-        planned_amount: parseFloat(data.planned_amount) || 0,
-        actual_amount: parseFloat(data.actual_amount) || 0,
-        due_date: editEntry?.due_date ?? dueDate,
-        paid_date: editEntry?.paid_date ?? null,
+        planned_amount: amount,
+        actual_amount: amount,
+        due_date: dueDate,
+        paid_date: paidDate,
         notes: data.notes || null,
+        category_is_recurring: isRecurring ? 1 : 0,
       });
 
-      // Update category recurring flag if changed
-      if (selectedCat && isRecurring !== (selectedCat.is_recurring === 1)) {
+      // Update category recurring flag and default_amount if changed
+      if (cat && (isRecurring !== (cat.is_recurring === 1) || (isRecurring && amount !== cat.default_amount))) {
         await updateCategory(data.category_id, {
           is_recurring: isRecurring ? 1 : 0,
-          default_amount: parseFloat(data.planned_amount) || 0,
+          default_amount: amount,
         });
       }
 
       onDismiss();
       reset();
       setIsRecurring(false);
+      setIsReceived(false);
     } finally {
       setSaving(false);
     }
@@ -178,8 +194,7 @@ export function AddEntrySheet({
                   onPress={() => {
                     setValue('category_id', cat.id);
                     if (cat.default_amount > 0) {
-                      setValue('planned_amount', String(cat.default_amount));
-                      setValue('actual_amount', String(cat.default_amount));
+                      setValue('amount', String(cat.default_amount));
                     }
                   }}
                 >
@@ -205,36 +220,42 @@ export function AddEntrySheet({
               </View>
             )}
 
-            <View style={styles.row}>
-              <View style={styles.halfField}>
+            <Controller
+              control={control}
+              name="amount"
+              render={({ field: { onChange, value } }) => (
+                <AmountInput
+                  label="Iznos"
+                  value={value}
+                  onChangeText={onChange}
+                  currency="€"
+                />
+              )}
+            />
+
+            {isIncome && (
+              <>
                 <Controller
                   control={control}
-                  name="planned_amount"
+                  name="due_date"
                   render={({ field: { onChange, value } }) => (
-                    <AmountInput
-                      label="Planirano"
+                    <TextInput
+                      label="Datum dospijeća (npr. 2026-04-15)"
                       value={value}
                       onChangeText={onChange}
-                      currency="€"
+                      mode="outlined"
+                      placeholder="YYYY-MM-DD"
+                      style={[styles.field, { backgroundColor: C.surface }]}
+                      left={<TextInput.Icon icon="calendar" />}
                     />
                   )}
                 />
-              </View>
-              <View style={styles.halfField}>
-                <Controller
-                  control={control}
-                  name="actual_amount"
-                  render={({ field: { onChange, value } }) => (
-                    <AmountInput
-                      label="Stvarno"
-                      value={value}
-                      onChangeText={onChange}
-                      currency="€"
-                    />
-                  )}
-                />
-              </View>
-            </View>
+                <View style={styles.switchRow}>
+                  <Text variant="bodyMedium">Primljeno na račun</Text>
+                  <Switch value={isReceived} onValueChange={setIsReceived} color={Colors.income} />
+                </View>
+              </>
+            )}
 
             <Controller
               control={control}
@@ -324,13 +345,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  halfField: {
-    flex: 1,
   },
   field: {},
   actions: {

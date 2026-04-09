@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Text, FAB, SegmentedButtons, Chip } from 'react-native-paper';
+import { Text, FAB, SegmentedButtons, Chip, Divider } from 'react-native-paper';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../../../constants/colors';
@@ -14,6 +14,8 @@ import { ConfirmDialog } from '../../../../components/common/ConfirmDialog';
 import { EmptyState } from '../../../../components/common/EmptyState';
 import { formatAmount } from '../../../../utils/currency';
 import { getMonthLabel } from '../../../../utils/dateHelpers';
+import { getMonthFuelTotal } from '../../../../database/queries/fuel';
+import { getMonthDailySummary } from '../../../../database/queries/daily';
 import { BudgetEntry, CategoryType } from '../../../../types';
 
 type TabType = 'income' | 'expense' | 'savings';
@@ -39,10 +41,19 @@ export default function MonthDetailScreen() {
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [recurringCollapsed, setRecurringCollapsed] = useState(false);
   const [oneTimeCollapsed, setOneTimeCollapsed] = useState(false);
+  const [fuelTotal, setFuelTotal] = useState(0);
+  const [dailySummary, setDailySummary] = useState({ total_allowed: 0, total_spent: 0, surplus: 0 });
 
   useEffect(() => {
     navigation.setOptions({ title: getMonthLabel(year, month) });
     loadMonth(year, month, settings.daily_default_amount);
+    Promise.all([
+      getMonthFuelTotal(year, month),
+      getMonthDailySummary(year, month),
+    ]).then(([fuel, daily]) => {
+      setFuelTotal(fuel);
+      setDailySummary(daily);
+    });
   }, [year, month]);
 
   const tabEntries =
@@ -250,6 +261,34 @@ export default function MonthDetailScreen() {
                 subtitle={`Dodaj ${activeTab === 'income' ? 'prihod' : activeTab === 'expense' ? 'trošak' : 'štednju'} tipkanjem +`}
               />
             )}
+            {activeTab === 'expense' && (
+              <View style={[styles.extraCosts, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+                <Text variant="labelMedium" style={[styles.extraCostsTitle, { color: C.unpaid }]}>
+                  Ostali troškovi
+                </Text>
+                <TouchableOpacity
+                  style={styles.extraRow}
+                  onPress={() => router.push(`/months/${year}/${month}/fuel`)}
+                >
+                  <MaterialCommunityIcons name="gas-station" size={20} color={Colors.primary} />
+                  <Text variant="bodyMedium" style={[styles.extraLabel, { color: C.onSurface }]}>Gorivo</Text>
+                  <Text variant="bodyMedium" style={{ color: Colors.expense, fontWeight: 'bold' }}>
+                    {formatAmount(fuelTotal, settings.currency)}
+                  </Text>
+                </TouchableOpacity>
+                <Divider />
+                <TouchableOpacity
+                  style={styles.extraRow}
+                  onPress={() => router.push(`/months/${year}/${month}/daily`)}
+                >
+                  <MaterialCommunityIcons name="calendar-today" size={20} color={Colors.primary} />
+                  <Text variant="bodyMedium" style={[styles.extraLabel, { color: C.onSurface }]}>Život</Text>
+                  <Text variant="bodyMedium" style={{ color: Colors.expense, fontWeight: 'bold' }}>
+                    {formatAmount(dailySummary.total_spent, settings.currency)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </>
         }
         contentContainerStyle={styles.list}
@@ -344,6 +383,30 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingBottom: 100,
+  },
+  extraCosts: {
+    marginTop: 16,
+    marginHorizontal: 12,
+    borderRadius: 8,
+    borderTopWidth: 1,
+    overflow: 'hidden',
+  },
+  extraCostsTitle: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  extraRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  extraLabel: {
+    flex: 1,
   },
   fab: {
     position: 'absolute',
